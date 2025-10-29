@@ -1,11 +1,6 @@
 # Facial-Recognition-DoorLock-Attendance-System
 A Raspberry Pi–based facial recognition door lock system using Pi Camera, relay, solenoid lock, and ultrasonic sensor — designed to unlock automatically for authorized users and record attendance.
 
-# Facial Recognition Door Lock and Attendance System
-
-This project uses **Facial Recognition** to unlock a door and mark **attendance automatically**.  
-It is built using a **Raspberry Pi**, **Pi Camera**, and **Python**.
-
 ---
 
 ## 🔍 What it does
