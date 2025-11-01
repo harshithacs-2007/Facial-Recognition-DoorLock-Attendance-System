@@ -10,32 +10,6 @@ This system detects a person using sensors, captures their face using a Pi Camer
 
 ---
 
-## 📂 Project Structure
-
-Attendance_System/
-│
-├── encode_faces.py # Generates encodings from known faces
-├── database.py # Creates and manages SQLite database
-├── attendance_logger.py # Logs recognized faces into database
-├── sensor_trigger.py # Reads sensor data (PIR / Ultrasonic)
-├── face_recognition_main.py # Main integration file
-│
-├── dataset/
-│ └── known/
-│ ├── Person1/
-│ │ ├── 1.jpg
-│ │ └── 2.jpg
-│ └── Person2/
-│ ├── 1.jpg
-│ └── 2.jpg
-│
-├── encodings.pickle
-└── attendance.db
-
----
-
----
-
 ## ⚙️ Setup Instructions
 
 ### 1️⃣ Install Dependencies
