@@ -1,0 +1,256 @@
+import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime, date
+import time
+
+# Page configuration
+st.set_page_config(
+    page_title="Face Recognition Attendance System",
+    page_icon="📸",
+    layout="wide"
+)
+
+# Custom CSS for better styling
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .stat-card {
+        background-color: #f0f2f6;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    .success-msg {
+        background-color: #d4edda;
+        color: #155724;
+        padding: 1rem;
+        border-radius: 5px;
+        border-left: 5px solid #28a745;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Database setup
+def init_db():
+    conn = sqlite3.connect('attendance.db', check_same_thread=False)
+    c = conn.cursor()
+    
+    # Create students table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS students
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT UNIQUE NOT NULL,
+                  photo BLOB)''')
+    
+    # Create attendance table if not exists
+    c.execute('''CREATE TABLE IF NOT EXISTS attendance
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  student_name TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  time TEXT NOT NULL,
+                  status TEXT DEFAULT 'Present')''')
+    
+    # Insert default students if table is empty
+    default_students = ['Harshitha', 'Janani', 'Karan', 'Divyansh', 'David']
+    for student in default_students:
+        try:
+            c.execute("INSERT INTO students (name) VALUES (?)", (student,))
+        except sqlite3.IntegrityError:
+            pass  # Student already exists
+    
+    conn.commit()
+    return conn
+
+# Database functions
+def mark_attendance(student_name, conn):
+    c = conn.cursor()
+    today = date.today().strftime("%Y-%m-%d")
+    current_time = datetime.now().strftime("%H:%M:%S")
+    
+    # Check if already marked today
+    c.execute("SELECT * FROM attendance WHERE student_name=? AND date=?", 
+              (student_name, today))
+    
+    if c.fetchone():
+        return False, "Already marked today"
+    
+    c.execute("INSERT INTO attendance (student_name, date, time, status) VALUES (?, ?, ?, ?)",
+              (student_name, today, current_time, 'Present'))
+    conn.commit()
+    return True, "Attendance marked successfully"
+
+def get_today_attendance(conn):
+    today = date.today().strftime("%Y-%m-%d")
+    query = f"SELECT student_name, time, status FROM attendance WHERE date='{today}'"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_all_attendance(conn):
+    query = "SELECT student_name, date, time, status FROM attendance ORDER BY date DESC, time DESC"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_student_attendance(student_name, conn):
+    query = f"SELECT date, time, status FROM attendance WHERE student_name='{student_name}' ORDER BY date DESC"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_all_students(conn):
+    c = conn.cursor()
+    c.execute("SELECT name FROM students ORDER BY name")
+    return [row[0] for row in c.fetchall()]
+
+# Initialize database
+conn = init_db()
+
+# Header
+st.markdown('<p class="main-header">📸 Face Recognition Attendance System</p>', unsafe_allow_html=True)
+
+# Sidebar
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["Mark Attendance", "View Attendance", "Statistics"])
+
+# Mark Attendance Page
+if page == "Mark Attendance":
+    st.header("📝 Mark Attendance")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Manual Entry")
+        students = get_all_students(conn)
+        selected_student = st.selectbox("Select Student", students)
+        
+        if st.button("Mark Present", type="primary", use_container_width=True):
+            success, message = mark_attendance(selected_student, conn)
+            if success:
+                st.success(f"✅ {message} for {selected_student}!")
+                time.sleep(1)
+                st.rerun()
+            else:
+                st.warning(f"⚠️ {message} for {selected_student}")
+    
+    with col2:
+        st.subheader("Camera Input")
+        st.info("🎥 Raspberry Pi camera integration point")
+        st.text("Connect your Pi camera here")
+        
+        # Placeholder for camera integration
+        if st.button("Simulate Pi Detection", use_container_width=True):
+            st.info("This would connect to your Raspberry Pi camera feed")
+            st.code("""
+# Raspberry Pi Integration Code:
+# Use MQTT, REST API, or WebSocket
+# to receive detected face names
+# from your Pi camera system
+            """)
+    
+    st.divider()
+    
+    # Today's Attendance
+    st.subheader("Today's Attendance")
+    today_df = get_today_attendance(conn)
+    
+    if not today_df.empty:
+        st.dataframe(today_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No attendance marked today yet")
+
+# View Attendance Page
+elif page == "View Attendance":
+    st.header("📊 Attendance Records")
+    
+    view_type = st.radio("View By:", ["All Records", "By Student", "By Date"], horizontal=True)
+    
+    if view_type == "All Records":
+        df = get_all_attendance(conn)
+        if not df.empty:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            
+            # Download button
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download as CSV",
+                data=csv,
+                file_name=f'attendance_{datetime.now().strftime("%Y%m%d")}.csv',
+                mime='text/csv',
+            )
+        else:
+            st.info("No attendance records found")
+    
+    elif view_type == "By Student":
+        students = get_all_students(conn)
+        selected = st.selectbox("Select Student", students)
+        df = get_student_attendance(selected, conn)
+        
+        if not df.empty:
+            st.metric("Total Days Present", len(df))
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No attendance records for {selected}")
+    
+    elif view_type == "By Date":
+        selected_date = st.date_input("Select Date", date.today())
+        date_str = selected_date.strftime("%Y-%m-%d")
+        
+        query = f"SELECT student_name, time, status FROM attendance WHERE date='{date_str}'"
+        df = pd.read_sql_query(query, conn)
+        
+        if not df.empty:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No attendance records for {selected_date}")
+
+# Statistics Page
+elif page == "Statistics":
+    st.header("📈 Attendance Statistics")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    # Total records
+    total_records = pd.read_sql_query("SELECT COUNT(*) as count FROM attendance", conn)['count'][0]
+    
+    # Today's attendance
+    today = date.today().strftime("%Y-%m-%d")
+    today_count = pd.read_sql_query(f"SELECT COUNT(*) as count FROM attendance WHERE date='{today}'", conn)['count'][0]
+    
+    # Total students
+    total_students = len(get_all_students(conn))
+    
+    with col1:
+        st.metric("Total Students", total_students)
+    
+    with col2:
+        st.metric("Today's Attendance", f"{today_count}/{total_students}")
+    
+    with col3:
+        st.metric("Total Records", total_records)
+    
+    st.divider()
+    
+    # Attendance by student
+    st.subheader("Attendance Overview")
+    query = """
+        SELECT student_name, COUNT(*) as days_present 
+        FROM attendance 
+        GROUP BY student_name 
+        ORDER BY days_present DESC
+    """
+    df = pd.read_sql_query(query, conn)
+    
+    if not df.empty:
+        st.bar_chart(df.set_index('student_name'))
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No attendance data available yet")
+
+# Footer
+st.sidebar.divider()
+st.sidebar.info(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.sidebar.caption("Face Recognition Attendance System v1.0")
