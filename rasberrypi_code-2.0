@@ -1,0 +1,54 @@
+# FILE: rpi_client.py
+
+import requests
+import time
+import random
+
+# !!! CRITICAL: REPLACE WITH THE ACTUAL ADDRESS OF YOUR API SERVER !!!
+# If your API server is running on a cloud service, use its public URL (e.g., http://123.45.67.89:5000)
+# If running locally for testing, use your API server's local IP address and port 5000.
+API_SERVER_URL = "http://YOUR_API_SERVER_IP_OR_DOMAIN:5000/api/mark_attendance" 
+
+def detect_face_and_get_name():
+    """
+    *** Placeholder for Actual Face Recognition Logic ***
+    Replace this with your OpenCV/ML code to capture, process, and identify a face.
+    """
+    # Simulated data:
+    detected_students = ['Harshitha', 'Janani', 'Karan', 'Divyansh', 'David']
+    recognized_name = random.choice(detected_students)
+    
+    print(f"✅ Detected student: {recognized_name}")
+    return recognized_name
+
+def send_attendance_data(student_name):
+    """Sends the detected student name to the Flask API endpoint."""
+    
+    payload = {"student_name": student_name}
+    
+    try:
+        response = requests.post(API_SERVER_URL, json=payload)
+        
+        if response.status_code == 200:
+            print(f"🟢 API Success: Attendance marked for {student_name}.")
+        else:
+            print(f"🔴 API Error: Status {response.status_code}. Response: {response.text}")
+            
+    except requests.exceptions.ConnectionError:
+        print(f"❌ Connection Error: Could not reach the API at {API_SERVER_URL}")
+    except Exception as e:
+        print(f"❌ An unexpected error occurred: {e}")
+
+# --- Main RPi Loop ---
+if __name__ == "__main__":
+    print(f"--- RPi Attendance Client Started ---")
+    
+    while True:
+        # 1. Run the simulated face detection
+        detected_name = detect_face_and_get_name()
+        
+        # 2. Send the data to the API
+        send_attendance_data(detected_name)
+        
+        # Wait before simulating the next detection (e.g., waiting for the next person to approach the camera)
+        time.sleep(5)
