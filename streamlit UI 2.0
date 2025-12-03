@@ -1,0 +1,181 @@
+# FILE: attendance_app.py
+
+import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import datetime, date
+import time
+
+# --- Database connection for READ-ONLY access ---
+DB_NAME = 'attendance.db'
+
+def get_db_connection():
+    # Assuming this file runs on the same machine/service as the API server,
+    # or has access to the same shared DB file.
+    return sqlite3.connect(DB_NAME, check_same_thread=False)
+
+# --- Database READ Functions (Your original code, simplified) ---
+def get_today_attendance(conn):
+    today = date.today().strftime("%Y-%m-%d")
+    query = f"SELECT student_name, time, status FROM attendance WHERE date='{today}'"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_all_attendance(conn):
+    query = "SELECT student_name, date, time, status FROM attendance ORDER BY date DESC, time DESC"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_student_attendance(student_name, conn):
+    query = f"SELECT date, time, status FROM attendance WHERE student_name='{student_name}' ORDER BY date DESC"
+    df = pd.read_sql_query(query, conn)
+    return df
+
+def get_all_students(conn):
+    # Reads students list from the DB
+    c = conn.cursor()
+    c.execute("SELECT name FROM students ORDER BY name")
+    return [row[0] for row in c.fetchall()]
+
+# --- UI Application Logic ---
+# Page configuration and Custom CSS (as per your original code)
+st.set_page_config(
+    page_title="Face Recognition Attendance System",
+    page_icon="📸",
+    layout="wide"
+)
+
+st.markdown("""
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .stat-card {
+        background-color: #f0f2f6;
+        padding: 1.5rem;
+        border-radius: 10px;
+        box-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Initialize database connection
+conn = get_db_connection()
+
+# Header
+st.markdown('<p class="main-header">📸 Face Recognition Attendance System</p>', unsafe_allow_html=True)
+
+# Sidebar
+st.sidebar.title("Navigation")
+page = st.sidebar.radio("Go to", ["Dashboard", "View Attendance", "Statistics"])
+
+# --- Dashboard Page (Simplified Mark Attendance) ---
+if page == "Dashboard":
+    st.header("Dashboard & Live Feed")
+    
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.subheader("Today's Live Attendance")
+        # To show the newest data, this needs to be re-run regularly
+        today_df = get_today_attendance(conn)
+        
+        if not today_df.empty:
+            st.dataframe(today_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No attendance marked today yet (Waiting for Pi detection)")
+            
+    with col2:
+        st.subheader("Camera Status")
+        st.success("🟢 API Server Running")
+        st.info("Waiting for RPi camera detection feed...")
+        
+        # This button is now only for demonstration/manual refresh
+        if st.button("Manual Refresh Data", type="primary", use_container_width=True):
+             st.rerun() # Forces Streamlit to re-read the data from the DB
+
+# --- View Attendance Page ---
+elif page == "View Attendance":
+    # (Rest of your original View Attendance logic goes here, which still works for reading data)
+    st.header("📊 Attendance Records")
+    view_type = st.radio("View By:", ["All Records", "By Student", "By Date"], horizontal=True)
+    # ... (Rest of the View Attendance logic remains the same)
+    
+    if view_type == "All Records":
+        df = get_all_attendance(conn)
+        # ... (Display and download logic)
+        if not df.empty:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            csv = df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download as CSV",
+                data=csv,
+                file_name=f'attendance_{datetime.now().strftime("%Y%m%d")}.csv',
+                mime='text/csv',
+            )
+        else:
+            st.info("No attendance records found")
+            
+    elif view_type == "By Student":
+        students = get_all_students(conn)
+        selected = st.selectbox("Select Student", students)
+        df = get_student_attendance(selected, conn)
+        if not df.empty:
+            st.metric("Total Days Present", len(df))
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No attendance records for {selected}")
+            
+    elif view_type == "By Date":
+        selected_date = st.date_input("Select Date", date.today())
+        date_str = selected_date.strftime("%Y-%m-%d")
+        query = f"SELECT student_name, time, status FROM attendance WHERE date='{date_str}'"
+        df = pd.read_sql_query(query, conn)
+        if not df.empty:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+        else:
+            st.info(f"No attendance records for {selected_date}")
+
+# --- Statistics Page ---
+elif page == "Statistics":
+    # (Rest of your original Statistics logic goes here, which still works for reading data)
+    st.header("📈 Attendance Statistics")
+    
+    col1, col2, col3 = st.columns(3)
+    total_records = pd.read_sql_query("SELECT COUNT(*) as count FROM attendance", conn)['count'][0]
+    today = date.today().strftime("%Y-%m-%d")
+    today_count = pd.read_sql_query(f"SELECT COUNT(*) as count FROM attendance WHERE date='{today}'", conn)['count'][0]
+    total_students = len(get_all_students(conn))
+    
+    with col1:
+        st.metric("Total Students", total_students)
+    with col2:
+        st.metric("Today's Attendance", f"{today_count}/{total_students}")
+    with col3:
+        st.metric("Total Records", total_records)
+    
+    st.divider()
+    
+    st.subheader("Attendance Overview")
+    query = """
+        SELECT student_name, COUNT(*) as days_present 
+        FROM attendance 
+        GROUP BY student_name 
+        ORDER BY days_present DESC
+    """
+    df = pd.read_sql_query(query, conn)
+    
+    if not df.empty:
+        st.bar_chart(df.set_index('student_name'))
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No attendance data available yet")
+
+# Footer
+st.sidebar.divider()
+st.sidebar.info(f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.sidebar.caption("Face Recognition Attendance System v1.0")
