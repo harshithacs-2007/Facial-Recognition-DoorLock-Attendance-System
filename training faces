@@ -1,0 +1,63 @@
+import face_recognition
+import cv2
+import pickle
+import numpy as np
+import os
+
+# Students list (add your actual student names)
+STUDENTS = ['Harshitha', 'Janani', 'Karan', 'Divyansh', 'David']
+DATASET_DIR = "face_dataset"
+
+def train_faces():
+    """Capture and train face encodings for all students."""
+    known_encodings = []
+    known_names = []
+    
+    for student in STUDENTS:
+        student_dir = os.path.join(DATASET_DIR, student)
+        os.makedirs(student_dir, exist_ok=True)
+        
+        print(f"Capture 20 photos of {student} (Press SPACE, Q to finish)")
+        cap = cv2.VideoCapture(0)
+        count = 0
+        
+        while count < 20:
+            ret, frame = cap.read()
+            if not ret:
+                continue
+                
+            cv2.putText(frame, f"{student}: {count}/20", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.imshow('Training', frame)
+            
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord(' '):
+                filename = os.path.join(student_dir, f"{count}.jpg")
+                cv2.imwrite(filename, frame)
+                count += 1
+            elif key == ord('q'):
+                break
+        
+        cap.release()
+        cv2.destroyAllWindows()
+    
+    # Train encodings
+    for student in STUDENTS:
+        student_dir = os.path.join(DATASET_DIR, student)
+        for img_file in os.listdir(student_dir):
+            image = face_recognition.load_image_file(os.path.join(student_dir, img_file))
+            encodings = face_recognition.face_encodings(image)
+            if encodings:
+                known_encodings.extend(encodings)
+                known_names.extend([student] * len(encodings))
+    
+    # Save encodings
+    with open(KNOWN_ENCODINGS_FILE, "wb") as f:
+        pickle.dump(known_encodings, f)
+    with open(KNOWN_NAMES_FILE, "wb") as f:
+        pickle.dump(known_names, f)
+    
+    print(f"Training complete! Saved {len(known_names)} encodings.")
+
+if __name__ == "__main__":
+    train_faces()
